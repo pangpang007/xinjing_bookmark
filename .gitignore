@@ -1,0 +1,26 @@
+# binaries
+/main
+/bin/
+*.exe
+
+# env & secrets
+.env
+.env.local
+*.pem
+
+# fonts (download via scripts/download-font.sh)
+assets/fonts/*.otf
+assets/fonts/*.ttf
+assets/fonts/*.ttc
+!assets/fonts/.gitkeep
+
+# ide / os
+.idea/
+.vscode/
+.DS_Store
+*.swp
+
+# test / build
+coverage.out
+tmp/
+dist/
