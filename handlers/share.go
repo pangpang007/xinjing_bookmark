@@ -1,7 +1,7 @@
 package handlers
 
 import (
-	"fmt"
+	"errors"
 	"log"
 	"net/http"
 	"strings"
@@ -14,72 +14,61 @@ import (
 	"github.com/soupcircle/bookjie-api/utils"
 )
 
-type shareRequest struct {
-	LiteratureText string `json:"literature_text"`
-	BookName       string `json:"book_name"`
-	Author         string `json:"author"`
-	Style          string `json:"style"`
-	Mood           string `json:"mood"`
-	Nickname       string `json:"nickname"`
-	AvatarURL      string `json:"avatar_url"`
-	AvatarBase64   string `json:"avatar_base64"`
-}
+const maxShareUploadBytes = services.MaxShareImageBytes + 256<<10
 
 func (h *Handler) ShareImage(c *gin.Context) {
 	userID, ok := middleware.GetUserID(c)
 	if !ok {
-		utils.Fail(c, utils.ErrCodeJWTInvalid, "请先登录")
+		utils.Fail(c, utils.ErrCodeJWTInvalid, "登录已过期，请重新登录")
 		return
 	}
-	if h.image == nil {
-		utils.Fail(c, utils.ErrCodeImageGenFail, "字体未就绪，无法生成分享图")
+
+	if isLegacyJSONShare(c) {
+		utils.Fail(c, utils.ErrCodeParamInvalid, "请升级后重试")
 		return
 	}
+
+	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, maxShareUploadBytes)
+
+	fh, err := c.FormFile("image")
+	if err != nil {
+		if isBodyTooLarge(err) {
+			utils.Fail(c, utils.ErrCodeImageTooLarge, "图片太大，请重试")
+			return
+		}
+		utils.Fail(c, utils.ErrCodeParamInvalid, "请上传分享图")
+		return
+	}
+	if fh.Size > services.MaxShareImageBytes {
+		utils.Fail(c, utils.ErrCodeImageTooLarge, "图片太大，请重试")
+		return
+	}
+
+	src, err := fh.Open()
+	if err != nil {
+		utils.Fail(c, utils.ErrCodeParamInvalid, "请上传分享图")
+		return
+	}
+	defer src.Close()
+
+	raw, err := services.ReadAtMost(src, services.MaxShareImageBytes)
+	if err != nil {
+		if services.IsTooLarge(err) || isBodyTooLarge(err) {
+			utils.Fail(c, utils.ErrCodeImageTooLarge, "图片太大，请重试")
+			return
+		}
+		utils.Fail(c, utils.ErrCodeParamInvalid, "请上传分享图")
+		return
+	}
+
+	jpegBytes, err := services.PrepareShareJPEG(raw)
+	if err != nil {
+		utils.Fail(c, utils.ErrCodeParamInvalid, "请上传分享图")
+		return
+	}
+
 	if h.r2 == nil {
 		utils.Fail(c, utils.ErrCodeR2UploadFail, "对象存储未配置")
-		return
-	}
-
-	var req shareRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		utils.Fail(c, utils.ErrCodeParamInvalid, "请求参数无效")
-		return
-	}
-	req.LiteratureText = strings.TrimSpace(req.LiteratureText)
-	req.BookName = strings.TrimSpace(req.BookName)
-	req.Author = strings.TrimSpace(req.Author)
-	req.Style = models.NormalizeStyle(strings.ToLower(strings.TrimSpace(req.Style)))
-	if req.LiteratureText == "" || req.BookName == "" || req.Author == "" {
-		utils.Fail(c, utils.ErrCodeParamInvalid, "文学内容不完整")
-		return
-	}
-
-	var user models.User
-	if err := h.db.First(&user, userID).Error; err != nil {
-		utils.Fail(c, utils.ErrCodeJWTInvalid, "用户不存在")
-		return
-	}
-
-	var qr []byte
-	if png, err := h.wechat.MiniProgramCode(c.Request.Context(), fmt.Sprintf("u=%d", user.ID)); err != nil {
-		log.Printf("[WARN] wxacode: %v", err)
-	} else {
-		qr = png
-	}
-
-	jpegBytes, err := h.image.Generate(services.ShareImageInput{
-		LiteratureText: req.LiteratureText,
-		BookName:       req.BookName,
-		Author:         req.Author,
-		Style:          req.Style,
-		Nickname:       resolveShareNickname(req.Nickname, user.Nickname),
-		AvatarURL:      firstNonEmpty(req.AvatarURL, user.AvatarURL),
-		AvatarBase64:   req.AvatarBase64,
-		QRCodePNG:      qr,
-	})
-	if err != nil {
-		log.Printf("[ERROR] generate share image: %v", err)
-		utils.Fail(c, utils.ErrCodeImageGenFail, "分享图生成失败")
 		return
 	}
 
@@ -91,20 +80,26 @@ func (h *Handler) ShareImage(c *gin.Context) {
 		return
 	}
 
-	imageURL := h.publicShareImageURL(objectKey)
-	lit := &models.LiteratureResponse{
-		LiteratureText: req.LiteratureText,
-		BookName:       req.BookName,
-		Author:         req.Author,
-		Style:          req.Style,
-	}
-	if req.Mood != "" {
-		h.saveHistory(userID, strings.TrimSpace(req.Mood), lit, objectKey)
-	} else {
-		h.attachImageURL(userID, lit, objectKey)
-	}
+	h.archiveShare(userID, c, objectKey)
+	utils.OK(c, gin.H{"image_url": h.publicShareImageURL(objectKey)})
+}
 
-	utils.OK(c, gin.H{"image_url": imageURL})
+func (h *Handler) archiveShare(userID int64, c *gin.Context, objectKey string) {
+	lit := &models.LiteratureResponse{
+		LiteratureText: strings.TrimSpace(c.PostForm("literature_text")),
+		BookName:       strings.TrimSpace(c.PostForm("book_name")),
+		Author:         strings.TrimSpace(c.PostForm("author")),
+		Style:          models.NormalizeStyle(strings.ToLower(strings.TrimSpace(c.PostForm("style")))),
+	}
+	mood := strings.TrimSpace(c.PostForm("mood"))
+	if lit.LiteratureText == "" && mood == "" {
+		return
+	}
+	if mood != "" {
+		h.saveHistory(userID, mood, lit, objectKey)
+		return
+	}
+	h.attachImageURL(userID, lit, objectKey)
 }
 
 func (h *Handler) ShareImageFile(c *gin.Context) {
@@ -123,4 +118,21 @@ func (h *Handler) ShareImageFile(c *gin.Context) {
 	c.Header("Cache-Control", "public, max-age=31536000, immutable")
 	c.Header("X-Content-Type-Options", "nosniff")
 	c.DataFromReader(http.StatusOK, size, contentType, body, nil)
+}
+
+func isLegacyJSONShare(c *gin.Context) bool {
+	ct := strings.ToLower(c.ContentType())
+	return strings.Contains(ct, "application/json")
+}
+
+func isBodyTooLarge(err error) bool {
+	if err == nil {
+		return false
+	}
+	var maxErr *http.MaxBytesError
+	if errors.As(err, &maxErr) {
+		return true
+	}
+	msg := strings.ToLower(err.Error())
+	return strings.Contains(msg, "too large") || strings.Contains(msg, "body size")
 }

@@ -3,6 +3,7 @@ package handlers
 import (
 	"log"
 	"strings"
+	"sync"
 
 	"github.com/gin-gonic/gin"
 	"github.com/go-redis/redis/v8"
@@ -21,9 +22,9 @@ type Handler struct {
 	jwt      *middleware.JWTAuth
 	deepseek *services.DeepSeek
 	wechat   *services.WeChat
-	image    *services.ImageService
 	r2       *services.R2
 	quota    *services.InterpretQuota
+	wxaMu    sync.Mutex
 }
 
 func New(
@@ -33,7 +34,6 @@ func New(
 	jwtAuth *middleware.JWTAuth,
 	deepseek *services.DeepSeek,
 	wechat *services.WeChat,
-	image *services.ImageService,
 	r2 *services.R2,
 ) *Handler {
 	return &Handler{
@@ -43,7 +43,6 @@ func New(
 		jwt:      jwtAuth,
 		deepseek: deepseek,
 		wechat:   wechat,
-		image:    image,
 		r2:       r2,
 		quota:    services.NewInterpretQuota(rdb, cfg.Timezone, cfg.InterpretDailyLimit),
 	}
@@ -107,20 +106,4 @@ func defaultNickname(name string) string {
 		return "心境用户"
 	}
 	return name
-}
-
-func resolveShareNickname(reqName, userName string) string {
-	if n := strings.TrimSpace(reqName); n != "" {
-		return n
-	}
-	return defaultNickname(userName)
-}
-
-func firstNonEmpty(values ...string) string {
-	for _, v := range values {
-		if s := strings.TrimSpace(v); s != "" {
-			return s
-		}
-	}
-	return ""
 }

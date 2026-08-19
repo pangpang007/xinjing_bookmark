@@ -35,7 +35,6 @@ type Config struct {
 	R2KeyPrefix   string
 	PublicBaseURL string
 
-	FontPath string
 	Timezone *time.Location
 
 	// InterpretDailyLimit is the max successful POST /interpret calls per user per day.
@@ -65,7 +64,7 @@ func Load() (*Config, error) {
 		DeepSeekBaseURL:     getEnv("DEEPSEEK_BASE_URL", "https://api.deepseek.com"),
 		WeChatAppID:         getEnv("WECHAT_APP_ID", "wx40efcaf0ff532927"),
 		WeChatAppSecret:     getEnv("WECHAT_APP_SECRET", ""),
-		WeChatQRPage:        getEnv("WECHAT_QR_PAGE", ""),
+		WeChatQRPage:        getEnv("WECHAT_QR_PAGE", "pages/index/index"),
 		WeChatEnvVersion:    getEnv("WECHAT_ENV_VERSION", "release"),
 		JWTSecret:           getEnv("JWT_SECRET", ""),
 		JWTExpiry:           time.Duration(expiryHours) * time.Hour,
@@ -76,7 +75,6 @@ func Load() (*Config, error) {
 		R2PublicURL:         strings.TrimRight(getEnv("R2_PUBLIC_URL", "https://r2.soupcircle.xyz"), "/"),
 		R2KeyPrefix:         strings.Trim(getEnv("R2_KEY_PREFIX", "bookmark"), "/"),
 		PublicBaseURL:       strings.TrimRight(getEnv("PUBLIC_BASE_URL", "https://api.soupcircle.xyz/bookmark"), "/"),
-		FontPath:            getEnv("FONT_PATH", "./assets/fonts/SourceHanSansCN-Regular.otf"),
 		Timezone:            loc,
 		InterpretDailyLimit: getEnvInt("INTERPRET_DAILY_LIMIT", 3),
 	}

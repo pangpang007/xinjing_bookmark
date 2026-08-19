@@ -75,7 +75,7 @@ func (j *JWTAuth) handle(required bool) gin.HandlerFunc {
 
 		claims, err := j.Parse(raw)
 		if err != nil {
-			utils.Fail(c, utils.ErrCodeJWTInvalid, "登录态无效或已过期")
+			utils.Fail(c, utils.ErrCodeJWTInvalid, "登录已过期，请重新登录")
 			c.Abort()
 			return
 		}

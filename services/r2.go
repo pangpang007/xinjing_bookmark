@@ -3,6 +3,7 @@ package services
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net/url"
@@ -14,6 +15,7 @@ import (
 	awsconfig "github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
+	"github.com/aws/smithy-go"
 	"github.com/soupcircle/bookjie-api/config"
 )
 
@@ -60,12 +62,19 @@ func NewR2(cfg *config.Config) (*R2, error) {
 }
 
 func (r *R2) UploadJPEG(ctx context.Context, key string, data []byte) (string, error) {
+	return r.Put(ctx, key, "image/jpeg", data)
+}
+
+func (r *R2) Put(ctx context.Context, key, contentType string, data []byte) (string, error) {
 	fullKey := r.objectKey(key)
+	if contentType == "" {
+		contentType = "application/octet-stream"
+	}
 	_, err := r.client.PutObject(ctx, &s3.PutObjectInput{
 		Bucket:      aws.String(r.bucket),
 		Key:         aws.String(fullKey),
 		Body:        bytes.NewReader(data),
-		ContentType: aws.String("image/jpeg"),
+		ContentType: aws.String(contentType),
 	})
 	if err != nil {
 		return "", err
@@ -73,19 +82,29 @@ func (r *R2) UploadJPEG(ctx context.Context, key string, data []byte) (string, e
 	return fullKey, nil
 }
 
-func (r *R2) GetJPEG(ctx context.Context, filename string) (io.ReadCloser, string, int64, error) {
-	name := ShareImageFilename(filename)
-	if name == "" {
-		return nil, "", 0, fmt.Errorf("invalid share image name")
+func (r *R2) Exists(ctx context.Context, key string) (bool, error) {
+	_, err := r.client.HeadObject(ctx, &s3.HeadObjectInput{
+		Bucket: aws.String(r.bucket),
+		Key:    aws.String(r.objectKey(key)),
+	})
+	if err == nil {
+		return true, nil
 	}
+	if isS3NotFound(err) {
+		return false, nil
+	}
+	return false, err
+}
+
+func (r *R2) Get(ctx context.Context, key string) (io.ReadCloser, string, int64, error) {
 	out, err := r.client.GetObject(ctx, &s3.GetObjectInput{
 		Bucket: aws.String(r.bucket),
-		Key:    aws.String(r.objectKey(name)),
+		Key:    aws.String(r.objectKey(key)),
 	})
 	if err != nil {
 		return nil, "", 0, err
 	}
-	contentType := "image/jpeg"
+	contentType := "application/octet-stream"
 	if out.ContentType != nil && *out.ContentType != "" {
 		contentType = *out.ContentType
 	}
@@ -94,6 +113,40 @@ func (r *R2) GetJPEG(ctx context.Context, filename string) (io.ReadCloser, strin
 		size = *out.ContentLength
 	}
 	return out.Body, contentType, size, nil
+}
+
+func (r *R2) GetJPEG(ctx context.Context, filename string) (io.ReadCloser, string, int64, error) {
+	name := ShareImageFilename(filename)
+	if name == "" {
+		return nil, "", 0, fmt.Errorf("invalid share image name")
+	}
+	body, contentType, size, err := r.Get(ctx, name)
+	if err != nil {
+		return nil, "", 0, err
+	}
+	if contentType == "application/octet-stream" {
+		contentType = "image/jpeg"
+	}
+	return body, contentType, size, nil
+}
+
+func WxaCodeObjectKey(env string) string {
+	env = strings.TrimSpace(env)
+	if env == "" {
+		env = "release"
+	}
+	return "wxacode/share-" + env + ".png"
+}
+
+func isS3NotFound(err error) bool {
+	var apiErr smithy.APIError
+	if errors.As(err, &apiErr) {
+		switch apiErr.ErrorCode() {
+		case "NotFound", "NoSuchKey", "NotFoundException":
+			return true
+		}
+	}
+	return false
 }
 
 // ShareImageFilename extracts a UUID jpeg name from an object key or any stored URL.

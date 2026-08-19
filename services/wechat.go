@@ -8,6 +8,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/go-redis/redis/v8"
@@ -93,7 +94,25 @@ func (w *WeChat) Code2OpenID(ctx context.Context, code string) (string, error) {
 	return parsed.OpenID, nil
 }
 
-func (w *WeChat) MiniProgramCode(ctx context.Context, scene string) ([]byte, error) {
+func (w *WeChat) ShareWxaCode(ctx context.Context) ([]byte, error) {
+	return w.getWxaCode(ctx, w.codePage(), "share", 280)
+}
+
+func (w *WeChat) codePage() string {
+	if w != nil && strings.TrimSpace(w.qrPage) != "" {
+		return strings.TrimSpace(w.qrPage)
+	}
+	return "pages/index/index"
+}
+
+func (w *WeChat) EnvVersion() string {
+	if w != nil && strings.TrimSpace(w.envVersion) != "" {
+		return strings.TrimSpace(w.envVersion)
+	}
+	return "release"
+}
+
+func (w *WeChat) getWxaCode(ctx context.Context, page, scene string, width int) ([]byte, error) {
 	token, err := w.accessToken(ctx)
 	if err != nil {
 		return nil, err
@@ -101,15 +120,10 @@ func (w *WeChat) MiniProgramCode(ctx context.Context, scene string) ([]byte, err
 
 	payload := map[string]interface{}{
 		"scene":       scene,
-		"width":       280,
+		"page":        page,
+		"width":       width,
 		"check_path":  false,
-		"env_version": w.envVersion,
-		"auto_color":  false,
-		"line_color":  map[string]int{"r": 0, "g": 0, "b": 0},
-		"is_hyaline":  true,
-	}
-	if w.qrPage != "" {
-		payload["page"] = w.qrPage
+		"env_version": w.EnvVersion(),
 	}
 
 	raw, _ := json.Marshal(payload)

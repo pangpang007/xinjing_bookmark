@@ -158,58 +158,89 @@ paths:
   /share-image:
     post:
       tags: [分享]
-      summary: 生成分享图
+      summary: 上传小程序画好的分享图
       description: |
-        图片存到对象存储，但 `data.image_url` 只返回本 API 域名下的地址
-        （如 `https://api.soupcircle.xyz/bookmark/share-images/{uuid}.jpg`），
-        小程序 `wx.downloadFile` 请使用该地址，并把 `api.soupcircle.xyz` 配进 downloadFile 合法域名。
-
-        底色跟随请求里的 `style`（warm 暖橙 / melancholy 暮蓝 / nostalgic 旧纸褐 / hopeful 芽绿），非法值用 nostalgic。
-        `book_name` 不要带《》，出图只包一层书名号。
-        昵称：`nickname` → 用户资料 → 心境用户。头像：`avatar_base64` → 下载 `avatar_url` → 空心圆；头像失败仍画昵称。
-        本接口不占用每日推荐次数。
+        小程序 canvas 出图后用 `wx.uploadFile` 上传，后端只存 R2，不再重绘。
+        `Content-Type: multipart/form-data`，字段名 `image`。
+        不占用每日推荐次数。请把 `api.soupcircle.xyz` 配进 uploadFile / downloadFile 合法域名。
+        旧版 JSON 出图已下线，会返回 code=1001「请升级后重试」。
       security:
         - BearerAuth: []
       requestBody:
         required: true
         content:
-          application/json:
+          multipart/form-data:
             schema:
               type: object
-              required: [literature_text, book_name, author, style]
+              required: [image]
               properties:
+                image:
+                  type: string
+                  format: binary
+                  description: JPEG/PNG，建议 750×1334，最大 2MB
                 literature_text:
                   type: string
+                  description: 可选，只归档
                 book_name:
                   type: string
                   example: 故乡
-                  description: 不要带《》，后端出图时只拼一次《书名》
                 author:
                   type: string
                   example: 鲁迅
                 style:
                   type: string
                   enum: [warm, melancholy, nostalgic, hopeful]
-                  example: warm
                 mood:
                   type: string
-                  description: 可选，写入历史用
-                nickname:
-                  type: string
-                  example: 用户昵称
-                avatar_url:
-                  type: string
-                  example: https://thirdwx.qlogo.cn/...
-                avatar_base64:
-                  type: string
-                  description: 可带 data:image/...;base64, 前缀；优先于 avatar_url
       responses:
         "200":
-          description: code=0 时 data.image_url 为本 API 下的图片地址
+          description: |
+            HTTP 始终 200。`code=0` 时 data.image_url 为本 API 下的图片地址；
+            `1001` 请上传分享图或请升级后重试；`1003` 图片太大；`4001` 登录过期。
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/Envelope"
+
+  /wxacode:
+    get:
+      tags: [分享]
+      summary: 获取小程序码公网地址
+      description: |
+        服务端调用 `wxa/getwxacodeunlimit`（page=`pages/index/index`，scene=`share`，width=280）。
+        同一 page+scene+env 只生成一次并缓存到 R2。微信失败 `code=1004`。
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: code=0 时 data.wxacode_url 如 `/wxacode/share.png`
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Envelope"
+
+  /wxacode/{filename}:
+    get:
+      tags: [分享]
+      summary: 下载小程序码 PNG
+      description: 无需登录，供 canvas 加载。目前仅 `share.png`。
+      parameters:
+        - name: filename
+          in: path
+          required: true
+          schema:
+            type: string
+            example: share.png
+      responses:
+        "200":
+          description: PNG 图片
+          content:
+            image/png:
+              schema:
+                type: string
+                format: binary
+        "404":
+          description: 尚未生成或不存在
 
   /share-images/{filename}:
     get:

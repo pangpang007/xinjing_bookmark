@@ -42,13 +42,6 @@ func main() {
 	deepseek := services.NewDeepSeek(cfg.DeepSeekAPIKey, cfg.DeepSeekBaseURL)
 	wechat := services.NewWeChat(cfg.WeChatAppID, cfg.WeChatAppSecret, cfg.WeChatQRPage, cfg.WeChatEnvVersion, rdb)
 
-	var imageSvc *services.ImageService
-	imageSvc, err = services.NewImageService(cfg.FontPath, cfg.Timezone)
-	if err != nil {
-		log.Printf("[WARN] share image disabled: %v", err)
-		imageSvc = nil
-	}
-
 	var r2 *services.R2
 	r2, err = services.NewR2(cfg)
 	if err != nil {
@@ -56,7 +49,7 @@ func main() {
 		r2 = nil
 	}
 
-	h := handlers.New(cfg, db, rdb, jwtAuth, deepseek, wechat, imageSvc, r2)
+	h := handlers.New(cfg, db, rdb, jwtAuth, deepseek, wechat, r2)
 	router := setupRouter(h, jwtAuth)
 
 	srv := &http.Server{
@@ -92,6 +85,7 @@ func main() {
 func setupRouter(h *handlers.Handler, jwtAuth *middleware.JWTAuth) *gin.Engine {
 	gin.SetMode(gin.ReleaseMode)
 	r := gin.New()
+	r.MaxMultipartMemory = 3 << 20
 	r.Use(gin.Recovery(), gin.Logger(), middleware.CORS())
 
 	mount := func(g *gin.RouterGroup) {
@@ -100,6 +94,8 @@ func setupRouter(h *handlers.Handler, jwtAuth *middleware.JWTAuth) *gin.Engine {
 		g.POST("/login", h.Login)
 		g.POST("/share-image", jwtAuth.Required(), h.ShareImage)
 		g.GET("/share-images/:filename", h.ShareImageFile)
+		g.GET("/wxacode", jwtAuth.Required(), h.WxaCode)
+		g.GET("/wxacode/:filename", h.WxaCodeFile)
 		g.GET("/history", jwtAuth.Required(), h.History)
 		handlers.RegisterSwagger(g)
 	}
