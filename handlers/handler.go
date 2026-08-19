@@ -23,6 +23,7 @@ type Handler struct {
 	wechat   *services.WeChat
 	image    *services.ImageService
 	r2       *services.R2
+	quota    *services.InterpretQuota
 }
 
 func New(
@@ -44,6 +45,7 @@ func New(
 		wechat:   wechat,
 		image:    image,
 		r2:       r2,
+		quota:    services.NewInterpretQuota(rdb, cfg.Timezone, cfg.InterpretDailyLimit),
 	}
 }
 
@@ -57,7 +59,7 @@ func (h *Handler) Health(c *gin.Context) {
 }
 
 func (h *Handler) saveHistory(userID int64, mood string, lit *models.LiteratureResponse, imageURL string) {
-	if userID <= 0 || lit == nil {
+	if userID <= 0 || lit == nil || h.db == nil {
 		return
 	}
 	row := models.History{

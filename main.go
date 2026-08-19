@@ -96,7 +96,7 @@ func setupRouter(h *handlers.Handler, jwtAuth *middleware.JWTAuth) *gin.Engine {
 
 	mount := func(g *gin.RouterGroup) {
 		g.GET("/health", h.Health)
-		g.POST("/interpret", jwtAuth.Optional(), h.Interpret)
+		g.POST("/interpret", jwtAuth.Required(), h.Interpret)
 		g.POST("/login", h.Login)
 		g.POST("/share-image", jwtAuth.Required(), h.ShareImage)
 		g.GET("/share-images/:filename", h.ShareImageFile)

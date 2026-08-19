@@ -21,7 +21,7 @@ go run .
 | 方法 | 路径 | 登录 |
 | --- | --- | --- |
 | GET | `/health` | 否 |
-| POST | `/interpret` | 可选。带 JWT 时写入历史 |
+| POST | `/interpret` | 是。按登录用户每天 3 次（`INTERPRET_DAILY_LIMIT`，0 表示不限制） |
 | POST | `/login` | 否 |
 | POST | `/share-image` | 是。`image_url` 为本 API 域名，不暴露 R2 |
 | GET | `/share-images/{uuid}.jpg` | 否。供小程序 `wx.downloadFile` / `<image>` |

@@ -53,6 +53,19 @@ components:
         style:
           type: string
           enum: [warm, melancholy, nostalgic, hopeful]
+        quota:
+          type: object
+          description: 当日额度。INTERPRET_DAILY_LIMIT=0 或 Redis 不可用时省略
+          properties:
+            used:
+              type: integer
+              example: 2
+            limit:
+              type: integer
+              example: 3
+            remaining:
+              type: integer
+              example: 1
 
 paths:
   /health:
@@ -80,7 +93,12 @@ paths:
     post:
       tags: [推荐]
       summary: 按心情推荐文学原文
-      description: 可不登录。带 JWT 时会写入历史。DeepSeek 失败会返回朱自清《匆匆》兜底。
+      description: |
+        需要登录。新生成和「换一段」都走本接口，按 `user_id` 每天成功 3 次（时区 Asia/Shanghai，0 点重置）。
+        参数错误不占次数；DeepSeek 失败但返回兜底文学也算成功。`/share-image`、`/login`、`/history` 不占用次数。
+        `INTERPRET_DAILY_LIMIT=0` 时不限制。
+      security:
+        - BearerAuth: []
       requestBody:
         required: true
         content:
@@ -95,7 +113,8 @@ paths:
                   maxLength: 200
       responses:
         "200":
-          description: code=0 成功
+          description: |
+            HTTP 始终 200。`code=0` 成功；`code=1001` 参数错误；`code=1002` 当日次数用完；`code=4001` 未登录。
           content:
             application/json:
               schema:

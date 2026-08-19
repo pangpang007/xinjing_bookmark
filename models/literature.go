@@ -5,6 +5,24 @@ type LiteratureResponse struct {
 	BookName       string `json:"book_name"`
 	Author         string `json:"author"`
 	Style          string `json:"style"`
+	Quota          *Quota `json:"quota,omitempty"`
+}
+
+type Quota struct {
+	Used      int `json:"used"`
+	Limit     int `json:"limit"`
+	Remaining int `json:"remaining"`
+}
+
+func NewQuota(used, limit int) *Quota {
+	if limit <= 0 || used < 0 {
+		return nil
+	}
+	remaining := limit - used
+	if remaining < 0 {
+		remaining = 0
+	}
+	return &Quota{Used: used, Limit: limit, Remaining: remaining}
 }
 
 var DefaultLiterature = &LiteratureResponse{
