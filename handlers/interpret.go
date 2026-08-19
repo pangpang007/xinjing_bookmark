@@ -17,6 +17,8 @@ type interpretRequest struct {
 	Mood string `json:"mood"`
 }
 
+const recentAvoidLimit = 8
+
 func (h *Handler) Interpret(c *gin.Context) {
 	userID, loggedIn := middleware.GetUserID(c)
 	if !loggedIn {
@@ -63,7 +65,8 @@ func (h *Handler) Interpret(c *gin.Context) {
 		}
 	}
 
-	lit := h.deepseek.Recommend(c.Request.Context(), mood)
+	avoid := h.loadAvoidWorks(c.Request.Context(), userID)
+	lit := h.deepseek.Recommend(c.Request.Context(), mood, avoid)
 	h.saveHistory(userID, mood, lit, "")
 	if lit != nil && used > 0 {
 		lit.Quota = models.NewQuota(used, limit)
@@ -114,4 +117,30 @@ func (h *Handler) lookupOpenID(ctx context.Context, userID int64) string {
 		return ""
 	}
 	return strings.TrimSpace(user.OpenID)
+}
+
+func (h *Handler) loadAvoidWorks(ctx context.Context, userID int64) []services.AvoidWork {
+	if h.db == nil || userID <= 0 {
+		return nil
+	}
+	var rows []models.History
+	err := h.db.WithContext(ctx).
+		Select("book_name", "author", "literature_text").
+		Where("user_id = ?", userID).
+		Order("id DESC").
+		Limit(recentAvoidLimit).
+		Find(&rows).Error
+	if err != nil {
+		log.Printf("[WARN] load history for recommend: %v", err)
+		return nil
+	}
+	out := make([]services.AvoidWork, 0, len(rows))
+	for _, row := range rows {
+		out = append(out, services.AvoidWork{
+			BookName:       row.BookName,
+			Author:         row.Author,
+			LiteratureText: row.LiteratureText,
+		})
+	}
+	return out
 }

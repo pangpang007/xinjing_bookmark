@@ -98,6 +98,7 @@ paths:
         JWT 和参数校验通过后、调用 DeepSeek 前，用微信内容安全 2.0（`msgSecCheck`，scene=4）审核 `mood`。
         `result.suggest` 为 `risky` 或 `review` 时返回 `code=1005`，`msg` 为给用户看的中文原因，不占次数、不调模型。
         微信超时或 token 失败只记日志并放行。空心情仍是 `code=1001`。`/share-image`、`/login` 不审核。
+        「换一段」与首次生成走同一接口；会读取该用户近期历史，要求模型换一篇不同的作品，避免重复上次内容。
         参数错误不占次数；DeepSeek 失败但返回兜底文学也算成功。`/share-image`、`/login`、`/history` 不占用次数。
         `INTERPRET_DAILY_LIMIT=0` 时不限制。
       security:
