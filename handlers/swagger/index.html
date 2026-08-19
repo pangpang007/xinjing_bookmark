@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>心境书签 API</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/swagger-ui-dist@5.17.14/swagger-ui.css" />
+  <style>
+    body { margin: 0; }
+  </style>
+</head>
+<body>
+  <div id="swagger-ui"></div>
+  <script src="https://cdn.jsdelivr.net/npm/swagger-ui-dist@5.17.14/swagger-ui-bundle.js"></script>
+  <script>
+    const prefix = location.pathname.includes("/bookmark/") ? "/bookmark" : "";
+    window.ui = SwaggerUIBundle({
+      url: prefix + "/swagger/openapi.yaml",
+      dom_id: "#swagger-ui",
+      persistAuthorization: true,
+      tryItOutEnabled: true,
+      deepLinking: true,
+    });
+  </script>
+</body>
+</html>

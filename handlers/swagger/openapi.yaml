@@ -1,0 +1,199 @@
+openapi: 3.0.3
+info:
+  title: 心境书签 API
+  description: |
+    微信小程序「心境书签」后端。
+
+    经网关访问时走 `/bookmark` 前缀。登录接口需要真实的微信 `js_code`，本地可先测「文学推荐」和「健康检查」。
+    需要登录的接口：右上角 **Authorize** 填 `Bearer` JWT。
+  version: "1.0.0"
+
+servers:
+  - url: https://api.soupcircle.xyz/bookmark
+    description: 公网（经网关）
+  - url: /bookmark
+    description: 相对路径 /bookmark
+  - url: /
+    description: 本地无前缀
+
+tags:
+  - name: 推荐
+  - name: 账号
+  - name: 分享
+  - name: 系统
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  schemas:
+    Envelope:
+      type: object
+      properties:
+        code:
+          type: integer
+          example: 0
+        msg:
+          type: string
+          example: success
+        data: {}
+    Literature:
+      type: object
+      properties:
+        literature_text:
+          type: string
+        book_name:
+          type: string
+          example: 匆匆
+        author:
+          type: string
+          example: 朱自清
+        style:
+          type: string
+          enum: [warm, melancholy, nostalgic, hopeful]
+
+paths:
+  /health:
+    get:
+      tags: [系统]
+      summary: 健康检查
+      responses:
+        "200":
+          description: 服务和数据库可用
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Envelope"
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          status:
+                            type: string
+                            example: ok
+
+  /interpret:
+    post:
+      tags: [推荐]
+      summary: 按心情推荐文学原文
+      description: 可不登录。带 JWT 时会写入历史。DeepSeek 失败会返回朱自清《匆匆》兜底。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [mood]
+              properties:
+                mood:
+                  type: string
+                  example: 想爸爸了
+                  maxLength: 200
+      responses:
+        "200":
+          description: code=0 成功
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Envelope"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/Literature"
+
+  /login:
+    post:
+      tags: [账号]
+      summary: 微信登录
+      description: `code` 来自小程序 `wx.login`。Swagger 里没有真实 code 时会返回微信登录失败。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [code]
+              properties:
+                code:
+                  type: string
+                  example: wx.login 返回的 code
+                nickname:
+                  type: string
+                  example: 心境用户
+                avatar_url:
+                  type: string
+      responses:
+        "200":
+          description: code=0 成功，data 含 token 和 user
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Envelope"
+
+  /share-image:
+    post:
+      tags: [分享]
+      summary: 生成分享图并上传 R2
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [literature_text, book_name, author, style]
+              properties:
+                literature_text:
+                  type: string
+                book_name:
+                  type: string
+                  example: 背影
+                author:
+                  type: string
+                  example: 朱自清
+                style:
+                  type: string
+                  enum: [warm, melancholy, nostalgic, hopeful]
+                  example: melancholy
+                mood:
+                  type: string
+                  description: 可选，写入历史用
+      responses:
+        "200":
+          description: code=0 时 data.image_url 为公网图片地址
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Envelope"
+
+  /history:
+    get:
+      tags: [账号]
+      summary: 分页查询历史
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+        - name: page_size
+          in: query
+          schema:
+            type: integer
+            default: 20
+            maximum: 50
+      responses:
+        "200":
+          description: code=0 时 data 含 list/total/page/page_size
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Envelope"

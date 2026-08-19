@@ -2,31 +2,33 @@
 
 微信小程序「心境书签」后端：文学推荐、微信登录、分享图、历史记录。
 
-对外域名按现有 Tunnel 约定走 `https://api.soupcircle.xyz/bookjie/*`，容器映射 `8082 -> 8080`。
+对外地址：`https://api.soupcircle.xyz/bookmark`  
+Swagger：https://api.soupcircle.xyz/bookmark/swagger
 
 ## 本地运行
 
 ```bash
 cp .env.example .env
-# 填 DATABASE_URL、JWT_SECRET、DEEPSEEK_API_KEY、WECHAT_APP_SECRET、R2_*
 bash scripts/download-font.sh
 go run .
 ```
 
-健康检查：`GET http://localhost:8080/health`
+- 健康检查：`GET http://localhost:8080/health`
+- Swagger：http://localhost:8080/swagger
 
 ## 接口
 
 | 方法 | 路径 | 登录 |
 | --- | --- | --- |
-| POST | `/api/v1/interpret` | 可选。带 JWT 时写入历史 |
-| POST | `/api/v1/login` | 否 |
-| POST | `/api/v1/share-image` | 是 |
-| GET | `/api/v1/history?page=1&page_size=20` | 是 |
+| GET | `/health` | 否 |
+| POST | `/interpret` | 可选。带 JWT 时写入历史 |
+| POST | `/login` | 否 |
+| POST | `/share-image` | 是 |
+| GET | `/history?page=1&page_size=20` | 是 |
 
-Cloudflare Tunnel 会把完整路径转进来，因此以上接口同时挂在 `/bookjie` 前缀下，例如：
+以上接口同时挂在 `/bookmark` 前缀下。小程序请调用：
 
-`https://api.soupcircle.xyz/bookjie/api/v1/interpret`
+`https://api.soupcircle.xyz/bookmark/interpret`
 
 ## NAS Docker
 
@@ -34,14 +36,25 @@ Cloudflare Tunnel 会把完整路径转进来，因此以上接口同时挂在 `
 docker compose up -d --build
 ```
 
-- 监听 `8082`，复用现有 Tunnel：`api.soupcircle.xyz` + `path: /bookjie/*` → `http://localhost:8082`
-- Postgres 用 `DATABASE_URL`（Supabase）
-- Redis 由 compose 内部提供，不暴露端口
+容器名是 `bookmark-api`，内部端口 `8080`，宿主机映射 `8082`。网关 `soupcircle-gateway` 会把 `/bookmark*` 转到这个容器，需要和网关在同一 Docker 网络：
+
+```bash
+docker inspect bookmark-api --format '{{range $k,$v := .NetworkSettings.Networks}}{{$k}} {{end}}'
+docker network connect <书签网络名> soupcircle-gateway
+# 或
+docker network connect soupcircle-edge bookmark-api
+```
+
+验证：
+
+```bash
+curl -sS https://api.soupcircle.xyz/bookmark/health
+```
 
 ## 待确认项
 
 - **DeepSeek API Key**：必填，否则 `/interpret` 会走朱自清《匆匆》兜底
-- **R2 bucket**：建议共用现有 bucket，对象前缀 `bookjie/`，自定义域保持 `https://r2.soupcircle.xyz`
+- **R2**：bucket `xinjing-bookmark`，对象前缀 `bookmark/`
 - **小程序 AppSecret**：必填，否则登录失败
-- **字体**：`scripts/download-font.sh` 会下载 Noto Sans SC（与思源黑体同族）。Docker 构建时也会尝试下载
-- **小程序码**：未发布时把 `WECHAT_ENV_VERSION=develop`；发布后改为 `release`
+- **字体**：`scripts/download-font.sh` 或 Docker 构建时自动下载
+- **小程序码**：未发布时 `WECHAT_ENV_VERSION=develop`；发布后改为 `release`

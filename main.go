@@ -66,7 +66,7 @@ func main() {
 	}
 
 	go func() {
-		log.Printf("[INFO] bookjie api listening on :%s", cfg.Port)
+		log.Printf("[INFO] bookmark api listening on :%s", cfg.Port)
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			log.Fatalf("[FATAL] server: %v", err)
 		}
@@ -96,17 +96,15 @@ func setupRouter(h *handlers.Handler, jwtAuth *middleware.JWTAuth) *gin.Engine {
 
 	mount := func(g *gin.RouterGroup) {
 		g.GET("/health", h.Health)
-		v1 := g.Group("/api/v1")
-		{
-			v1.POST("/interpret", jwtAuth.Optional(), h.Interpret)
-			v1.POST("/login", h.Login)
-			v1.POST("/share-image", jwtAuth.Required(), h.ShareImage)
-			v1.GET("/history", jwtAuth.Required(), h.History)
-		}
+		g.POST("/interpret", jwtAuth.Optional(), h.Interpret)
+		g.POST("/login", h.Login)
+		g.POST("/share-image", jwtAuth.Required(), h.ShareImage)
+		g.GET("/history", jwtAuth.Required(), h.History)
+		handlers.RegisterSwagger(g)
 	}
 
 	mount(r.Group(""))
-	mount(r.Group("/bookjie"))
+	mount(r.Group("/bookmark"))
 	return r
 }
 

@@ -14,7 +14,7 @@ import (
 )
 
 const (
-	wechatAccessTokenKey = "bookjie:wechat:access_token"
+	wechatAccessTokenKey = "bookmark:wechat:access_token"
 	wechatHTTPTimeout    = 12 * time.Second
 )
 

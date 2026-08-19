@@ -69,7 +69,7 @@ func Load() (*Config, error) {
 		R2SecretKey:       getEnv("R2_SECRET_KEY", ""),
 		R2BucketName:      getEnv("R2_BUCKET_NAME", ""),
 		R2PublicURL:       strings.TrimRight(getEnv("R2_PUBLIC_URL", "https://r2.soupcircle.xyz"), "/"),
-		R2KeyPrefix:       strings.Trim(getEnv("R2_KEY_PREFIX", "bookjie"), "/"),
+		R2KeyPrefix:       strings.Trim(getEnv("R2_KEY_PREFIX", "bookmark"), "/"),
 		FontPath:          getEnv("FONT_PATH", "./assets/fonts/SourceHanSansCN-Regular.otf"),
 		Timezone:          loc,
 	}

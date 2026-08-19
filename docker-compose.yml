@@ -1,7 +1,7 @@
 services:
   redis:
     image: redis:7-alpine
-    container_name: bookjie-redis
+    container_name: bookmark-redis
     volumes:
       - redisdata:/data
     healthcheck:
@@ -11,15 +11,15 @@ services:
       retries: 5
     restart: unless-stopped
 
-  api:
+  bookmark-api:
     build:
       context: .
       args:
         HTTP_PROXY: ${HTTP_PROXY:-}
         HTTPS_PROXY: ${HTTPS_PROXY:-}
         NO_PROXY: ${NO_PROXY:-}
-    image: bookjie-api:latest
-    container_name: bookjie-api
+    image: bookmark-api:latest
+    container_name: bookmark-api
     ports:
       - "8082:8080"
     env_file:
@@ -30,6 +30,7 @@ services:
       TZ: Asia/Shanghai
       HTTP_PROXY: ${HTTP_PROXY:-}
       HTTPS_PROXY: ${HTTPS_PROXY:-}
+      NO_PROXY: redis,localhost,127.0.0.1
     depends_on:
       redis:
         condition: service_healthy
