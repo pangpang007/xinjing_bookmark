@@ -20,6 +20,9 @@ type shareRequest struct {
 	Author         string `json:"author"`
 	Style          string `json:"style"`
 	Mood           string `json:"mood"`
+	Nickname       string `json:"nickname"`
+	AvatarURL      string `json:"avatar_url"`
+	AvatarBase64   string `json:"avatar_base64"`
 }
 
 func (h *Handler) ShareImage(c *gin.Context) {
@@ -69,8 +72,9 @@ func (h *Handler) ShareImage(c *gin.Context) {
 		BookName:       req.BookName,
 		Author:         req.Author,
 		Style:          req.Style,
-		Nickname:       user.Nickname,
-		AvatarURL:      user.AvatarURL,
+		Nickname:       resolveShareNickname(req.Nickname, user.Nickname),
+		AvatarURL:      firstNonEmpty(req.AvatarURL, user.AvatarURL),
+		AvatarBase64:   req.AvatarBase64,
 		QRCodePNG:      qr,
 	})
 	if err != nil {

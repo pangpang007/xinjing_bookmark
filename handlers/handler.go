@@ -108,3 +108,19 @@ func defaultNickname(name string) string {
 	}
 	return name
 }
+
+func resolveShareNickname(reqName, userName string) string {
+	if n := strings.TrimSpace(reqName); n != "" {
+		return n
+	}
+	return defaultNickname(userName)
+}
+
+func firstNonEmpty(values ...string) string {
+	for _, v := range values {
+		if s := strings.TrimSpace(v); s != "" {
+			return s
+		}
+	}
+	return ""
+}

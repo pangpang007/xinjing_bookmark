@@ -163,6 +163,11 @@ paths:
         图片存到对象存储，但 `data.image_url` 只返回本 API 域名下的地址
         （如 `https://api.soupcircle.xyz/bookmark/share-images/{uuid}.jpg`），
         小程序 `wx.downloadFile` 请使用该地址，并把 `api.soupcircle.xyz` 配进 downloadFile 合法域名。
+
+        底色跟随请求里的 `style`（warm 暖橙 / melancholy 暮蓝 / nostalgic 旧纸褐 / hopeful 芽绿），非法值用 nostalgic。
+        `book_name` 不要带《》，出图只包一层书名号。
+        昵称：`nickname` → 用户资料 → 心境用户。头像：`avatar_base64` → 下载 `avatar_url` → 空心圆；头像失败仍画昵称。
+        本接口不占用每日推荐次数。
       security:
         - BearerAuth: []
       requestBody:
@@ -177,17 +182,27 @@ paths:
                   type: string
                 book_name:
                   type: string
-                  example: 背影
+                  example: 故乡
+                  description: 不要带《》，后端出图时只拼一次《书名》
                 author:
                   type: string
-                  example: 朱自清
+                  example: 鲁迅
                 style:
                   type: string
                   enum: [warm, melancholy, nostalgic, hopeful]
-                  example: melancholy
+                  example: warm
                 mood:
                   type: string
                   description: 可选，写入历史用
+                nickname:
+                  type: string
+                  example: 用户昵称
+                avatar_url:
+                  type: string
+                  example: https://thirdwx.qlogo.cn/...
+                avatar_base64:
+                  type: string
+                  description: 可带 data:image/...;base64, 前缀；优先于 avatar_url
       responses:
         "200":
           description: code=0 时 data.image_url 为本 API 下的图片地址

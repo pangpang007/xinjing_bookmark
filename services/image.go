@@ -2,10 +2,10 @@ package services
 
 import (
 	"bytes"
+	"encoding/base64"
 	"fmt"
 	"image"
 	"image/color"
-	"image/draw"
 	"image/jpeg"
 	"image/png"
 	"io"
@@ -28,10 +28,21 @@ const (
 )
 
 var styleColors = map[string]color.RGBA{
-	"warm":       {R: 255, G: 140, B: 66, A: 255},
-	"melancholy": {R: 44, G: 95, B: 93, A: 255},
-	"nostalgic":  {R: 139, G: 115, B: 85, A: 255},
-	"hopeful":    {R: 106, G: 168, B: 79, A: 255},
+	"warm":       hexRGB(0xC47A4A), // 暖橙
+	"melancholy": hexRGB(0x3D4A6B), // 暮蓝
+	"nostalgic":  hexRGB(0x8B7355), // 旧纸褐
+	"hopeful":    hexRGB(0x5B8F6B), // 芽绿
+}
+
+func hexRGB(n uint32) color.RGBA {
+	return color.RGBA{R: uint8(n >> 16), G: uint8(n >> 8), B: uint8(n), A: 255}
+}
+
+func backgroundForStyle(style string) color.RGBA {
+	if c, ok := styleColors[style]; ok {
+		return c
+	}
+	return styleColors["nostalgic"]
 }
 
 type ImageService struct {
@@ -47,6 +58,7 @@ type ShareImageInput struct {
 	Style          string
 	Nickname       string
 	AvatarURL      string
+	AvatarBase64   string
 	QRCodePNG      []byte
 }
 
@@ -70,10 +82,7 @@ func NewImageService(fontPath string, loc *time.Location) (*ImageService, error)
 }
 
 func (s *ImageService) Generate(in ShareImageInput) ([]byte, error) {
-	bg, ok := styleColors[in.Style]
-	if !ok {
-		bg = styleColors["nostalgic"]
-	}
+	bg := backgroundForStyle(in.Style)
 
 	dc := gg.NewContext(shareWidth, shareHeight)
 	dc.SetColor(bg)
@@ -112,8 +121,7 @@ func (s *ImageService) Generate(in ShareImageInput) ([]byte, error) {
 
 	dc.SetFontFace(metaFace)
 	dc.SetRGBA(1, 1, 1, 0.88)
-	citation := fmt.Sprintf("《%s》  %s", in.BookName, in.Author)
-	dc.DrawStringAnchored(citation, shareWidth/2, 1048, 0.5, 0.5)
+	dc.DrawStringAnchored(formatCitation(in.BookName, in.Author), shareWidth/2, 1048, 0.5, 0.5)
 
 	dc.SetRGBA(1, 1, 1, 0.35)
 	dc.SetLineWidth(1)
@@ -208,7 +216,7 @@ func drawFooter(dc *gg.Context, s *ImageService, smallFace font.Face, in ShareIm
 	)
 	avatarCX := 90.0 + avatarR
 	avatarCY := float64(shareHeight) - bottomPad - 88
-	avatar := s.loadAvatar(in.AvatarURL, int(avatarR*2))
+	avatar := s.resolveAvatar(in, int(avatarR*2))
 	drawCircleImage(dc, avatar, avatarCX, avatarCY, avatarR)
 
 	dc.SetFontFace(smallFace)
@@ -237,43 +245,101 @@ func drawFooter(dc *gg.Context, s *ImageService, smallFace font.Face, in ShareIm
 	}
 }
 
-func (s *ImageService) loadAvatar(url string, size int) image.Image {
-	placeholder := avatarPlaceholder(size)
-	if url == "" {
-		return placeholder
+func formatCitation(bookName, author string) string {
+	return fmt.Sprintf("《%s》 %s", stripBookMarks(bookName), strings.TrimSpace(author))
+}
+
+func stripBookMarks(s string) string {
+	s = strings.TrimSpace(s)
+	for {
+		next := strings.TrimPrefix(s, "《")
+		next = strings.TrimSuffix(next, "》")
+		next = strings.TrimSpace(next)
+		if next == s {
+			return next
+		}
+		s = next
 	}
-	req, err := http.NewRequest(http.MethodGet, url, nil)
+}
+
+func (s *ImageService) resolveAvatar(in ShareImageInput, size int) image.Image {
+	if img := decodeAvatarBase64(in.AvatarBase64, size); img != nil {
+		return img
+	}
+	return s.downloadAvatar(in.AvatarURL, size)
+}
+
+func decodeAvatarBase64(raw string, size int) image.Image {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return nil
+	}
+	if i := strings.Index(raw, ","); i >= 0 {
+		meta := strings.ToLower(raw[:i])
+		if strings.HasPrefix(strings.TrimSpace(meta), "data:") || strings.Contains(meta, "base64") {
+			raw = raw[i+1:]
+		}
+	}
+	raw = strings.Map(func(r rune) rune {
+		if r == '\n' || r == '\r' || r == ' ' {
+			return -1
+		}
+		return r
+	}, raw)
+
+	data, err := base64.StdEncoding.DecodeString(raw)
 	if err != nil {
-		return placeholder
+		data, err = base64.RawStdEncoding.DecodeString(raw)
+		if err != nil {
+			log.Printf("[WARN] decode avatar base64: %v", err)
+			return nil
+		}
 	}
-	resp, err := s.httpClient.Do(req)
+	if len(data) == 0 || len(data) > 4<<20 {
+		return nil
+	}
+	img, err := imaging.Decode(bytes.NewReader(data))
 	if err != nil {
-		log.Printf("[WARN] download avatar: %v", err)
-		return placeholder
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		return placeholder
-	}
-	img, err := imaging.Decode(io.LimitReader(resp.Body, 4<<20))
-	if err != nil {
-		return placeholder
+		log.Printf("[WARN] decode avatar image: %v", err)
+		return nil
 	}
 	return imaging.Fill(img, size, size, imaging.Center, imaging.Lanczos)
 }
 
-func avatarPlaceholder(size int) image.Image {
-	img := image.NewRGBA(image.Rect(0, 0, size, size))
-	draw.Draw(img, img.Bounds(), &image.Uniform{C: color.RGBA{255, 255, 255, 40}}, image.Point{}, draw.Src)
-	return img
+func (s *ImageService) downloadAvatar(url string, size int) image.Image {
+	url = strings.TrimSpace(url)
+	if url == "" || s == nil || s.httpClient == nil {
+		return nil
+	}
+	req, err := http.NewRequest(http.MethodGet, url, nil)
+	if err != nil {
+		return nil
+	}
+	resp, err := s.httpClient.Do(req)
+	if err != nil {
+		log.Printf("[WARN] download avatar: %v", err)
+		return nil
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return nil
+	}
+	img, err := imaging.Decode(io.LimitReader(resp.Body, 4<<20))
+	if err != nil {
+		log.Printf("[WARN] decode avatar url: %v", err)
+		return nil
+	}
+	return imaging.Fill(img, size, size, imaging.Center, imaging.Lanczos)
 }
 
 func drawCircleImage(dc *gg.Context, img image.Image, cx, cy, r float64) {
-	dc.Push()
-	dc.DrawCircle(cx, cy, r)
-	dc.Clip()
-	dc.DrawImageAnchored(img, int(cx), int(cy), 0.5, 0.5)
-	dc.Pop()
+	if img != nil {
+		dc.Push()
+		dc.DrawCircle(cx, cy, r)
+		dc.Clip()
+		dc.DrawImageAnchored(img, int(cx), int(cy), 0.5, 0.5)
+		dc.Pop()
+	}
 	dc.SetRGB(1, 1, 1)
 	dc.SetLineWidth(3)
 	dc.DrawCircle(cx, cy, r)
