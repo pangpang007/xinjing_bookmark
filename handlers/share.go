@@ -3,6 +3,7 @@ package handlers
 import (
 	"fmt"
 	"log"
+	"net/http"
 	"strings"
 
 	"github.com/gin-gonic/gin"
@@ -79,13 +80,14 @@ func (h *Handler) ShareImage(c *gin.Context) {
 	}
 
 	key := uuid.NewString() + ".jpg"
-	url, err := h.r2.UploadJPEG(c.Request.Context(), key, jpegBytes)
+	objectKey, err := h.r2.UploadJPEG(c.Request.Context(), key, jpegBytes)
 	if err != nil {
 		log.Printf("[ERROR] r2 upload: %v", err)
 		utils.Fail(c, utils.ErrCodeR2UploadFail, "分享图上传失败")
 		return
 	}
 
+	imageURL := h.publicShareImageURL(objectKey)
 	lit := &models.LiteratureResponse{
 		LiteratureText: req.LiteratureText,
 		BookName:       req.BookName,
@@ -93,10 +95,28 @@ func (h *Handler) ShareImage(c *gin.Context) {
 		Style:          req.Style,
 	}
 	if req.Mood != "" {
-		h.saveHistory(userID, strings.TrimSpace(req.Mood), lit, url)
+		h.saveHistory(userID, strings.TrimSpace(req.Mood), lit, objectKey)
 	} else {
-		h.attachImageURL(userID, lit, url)
+		h.attachImageURL(userID, lit, objectKey)
 	}
 
-	utils.OK(c, gin.H{"image_url": url})
+	utils.OK(c, gin.H{"image_url": imageURL})
+}
+
+func (h *Handler) ShareImageFile(c *gin.Context) {
+	name := services.ShareImageFilename(c.Param("filename"))
+	if name == "" || h.r2 == nil {
+		c.Status(http.StatusNotFound)
+		return
+	}
+	body, contentType, size, err := h.r2.GetJPEG(c.Request.Context(), name)
+	if err != nil {
+		log.Printf("[WARN] share image fetch: %v", err)
+		c.Status(http.StatusNotFound)
+		return
+	}
+	defer body.Close()
+	c.Header("Cache-Control", "public, max-age=31536000, immutable")
+	c.Header("X-Content-Type-Options", "nosniff")
+	c.DataFromReader(http.StatusOK, size, contentType, body, nil)
 }

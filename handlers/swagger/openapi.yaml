@@ -139,7 +139,11 @@ paths:
   /share-image:
     post:
       tags: [分享]
-      summary: 生成分享图并上传 R2
+      summary: 生成分享图
+      description: |
+        图片存到对象存储，但 `data.image_url` 只返回本 API 域名下的地址
+        （如 `https://api.soupcircle.xyz/bookmark/share-images/{uuid}.jpg`），
+        小程序 `wx.downloadFile` 请使用该地址，并把 `api.soupcircle.xyz` 配进 downloadFile 合法域名。
       security:
         - BearerAuth: []
       requestBody:
@@ -167,11 +171,34 @@ paths:
                   description: 可选，写入历史用
       responses:
         "200":
-          description: code=0 时 data.image_url 为公网图片地址
+          description: code=0 时 data.image_url 为本 API 下的图片地址
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/Envelope"
+
+  /share-images/{filename}:
+    get:
+      tags: [分享]
+      summary: 下载分享图
+      description: 后端从对象存储读取后原样返回 JPEG，无需登录。文件名为 UUID。
+      parameters:
+        - name: filename
+          in: path
+          required: true
+          schema:
+            type: string
+            example: 550e8400-e29b-41d4-a716-446655440000.jpg
+      responses:
+        "200":
+          description: JPEG 图片
+          content:
+            image/jpeg:
+              schema:
+                type: string
+                format: binary
+        "404":
+          description: 文件不存在或文件名非法
 
   /history:
     get:
@@ -193,7 +220,7 @@ paths:
             maximum: 50
       responses:
         "200":
-          description: code=0 时 data 含 list/total/page/page_size
+          description: code=0 时 data 含 list/total/page/page_size。历史里的 image_url 同样改写为本 API 地址。
           content:
             application/json:
               schema:

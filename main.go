@@ -99,6 +99,7 @@ func setupRouter(h *handlers.Handler, jwtAuth *middleware.JWTAuth) *gin.Engine {
 		g.POST("/interpret", jwtAuth.Optional(), h.Interpret)
 		g.POST("/login", h.Login)
 		g.POST("/share-image", jwtAuth.Required(), h.ShareImage)
+		g.GET("/share-images/:filename", h.ShareImageFile)
 		g.GET("/history", jwtAuth.Required(), h.History)
 		handlers.RegisterSwagger(g)
 	}

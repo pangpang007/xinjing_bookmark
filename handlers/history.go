@@ -47,6 +47,9 @@ func (h *Handler) History(c *gin.Context) {
 	if list == nil {
 		list = []models.History{}
 	}
+	for i := range list {
+		list[i].ImageURL = h.publicShareImageURL(list[i].ImageURL)
+	}
 
 	utils.OK(c, gin.H{
 		"list":      list,

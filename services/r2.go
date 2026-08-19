@@ -4,6 +4,10 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"io"
+	"net/url"
+	"path"
+	"regexp"
 	"strings"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -13,11 +17,12 @@ import (
 	"github.com/soupcircle/bookjie-api/config"
 )
 
+var shareImageNameRe = regexp.MustCompile(`(?i)^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.jpe?g$`)
+
 type R2 struct {
-	client    *s3.Client
-	bucket    string
-	publicURL string
-	prefix    string
+	client *s3.Client
+	bucket string
+	prefix string
 }
 
 func NewR2(cfg *config.Config) (*R2, error) {
@@ -48,10 +53,9 @@ func NewR2(cfg *config.Config) (*R2, error) {
 	})
 
 	return &R2{
-		client:    client,
-		bucket:    cfg.R2BucketName,
-		publicURL: cfg.R2PublicURL,
-		prefix:    cfg.R2KeyPrefix,
+		client: client,
+		bucket: cfg.R2BucketName,
+		prefix: cfg.R2KeyPrefix,
 	}, nil
 }
 
@@ -66,7 +70,47 @@ func (r *R2) UploadJPEG(ctx context.Context, key string, data []byte) (string, e
 	if err != nil {
 		return "", err
 	}
-	return r.publicURL + "/" + fullKey, nil
+	return fullKey, nil
+}
+
+func (r *R2) GetJPEG(ctx context.Context, filename string) (io.ReadCloser, string, int64, error) {
+	name := ShareImageFilename(filename)
+	if name == "" {
+		return nil, "", 0, fmt.Errorf("invalid share image name")
+	}
+	out, err := r.client.GetObject(ctx, &s3.GetObjectInput{
+		Bucket: aws.String(r.bucket),
+		Key:    aws.String(r.objectKey(name)),
+	})
+	if err != nil {
+		return nil, "", 0, err
+	}
+	contentType := "image/jpeg"
+	if out.ContentType != nil && *out.ContentType != "" {
+		contentType = *out.ContentType
+	}
+	size := int64(-1)
+	if out.ContentLength != nil {
+		size = *out.ContentLength
+	}
+	return out.Body, contentType, size, nil
+}
+
+// ShareImageFilename extracts a UUID jpeg name from an object key or any stored URL.
+func ShareImageFilename(stored string) string {
+	stored = strings.TrimSpace(stored)
+	if stored == "" {
+		return ""
+	}
+	p := stored
+	if u, err := url.Parse(stored); err == nil && u.Scheme != "" {
+		p = u.Path
+	}
+	name := path.Base(p)
+	if !shareImageNameRe.MatchString(name) {
+		return ""
+	}
+	return strings.ToLower(name)
 }
 
 func (r *R2) objectKey(key string) string {

@@ -23,7 +23,8 @@ go run .
 | GET | `/health` | 否 |
 | POST | `/interpret` | 可选。带 JWT 时写入历史 |
 | POST | `/login` | 否 |
-| POST | `/share-image` | 是 |
+| POST | `/share-image` | 是。`image_url` 为本 API 域名，不暴露 R2 |
+| GET | `/share-images/{uuid}.jpg` | 否。供小程序 `wx.downloadFile` / `<image>` |
 | GET | `/history?page=1&page_size=20` | 是 |
 
 以上接口同时挂在 `/bookmark` 前缀下。小程序请调用：
@@ -54,7 +55,7 @@ curl -sS https://api.soupcircle.xyz/bookmark/health
 ## 待确认项
 
 - **DeepSeek API Key**：必填，否则 `/interpret` 会走朱自清《匆匆》兜底
-- **R2**：bucket `xinjing-bookmark`，对象前缀 `bookmark/`
+- **R2**：bucket `xinjing-bookmark`，对象前缀 `bookmark/`。小程序只访问 `https://api.soupcircle.xyz/bookmark/share-images/...`，请把 `api.soupcircle.xyz` 配进 downloadFile 合法域名
 - **小程序 AppSecret**：必填，否则登录失败
 - **字体**：`scripts/download-font.sh` 或 Docker 构建时自动下载
 - **小程序码**：未发布时 `WECHAT_ENV_VERSION=develop`；发布后改为 `release`

@@ -33,6 +33,7 @@ type Config struct {
 	R2BucketName  string
 	R2PublicURL   string
 	R2KeyPrefix   string
+	PublicBaseURL string
 
 	FontPath string
 	Timezone *time.Location
@@ -70,6 +71,7 @@ func Load() (*Config, error) {
 		R2BucketName:      getEnv("R2_BUCKET_NAME", ""),
 		R2PublicURL:       strings.TrimRight(getEnv("R2_PUBLIC_URL", "https://r2.soupcircle.xyz"), "/"),
 		R2KeyPrefix:       strings.Trim(getEnv("R2_KEY_PREFIX", "bookmark"), "/"),
+		PublicBaseURL:     strings.TrimRight(getEnv("PUBLIC_BASE_URL", "https://api.soupcircle.xyz/bookmark"), "/"),
 		FontPath:          getEnv("FONT_PATH", "./assets/fonts/SourceHanSansCN-Regular.otf"),
 		Timezone:          loc,
 	}

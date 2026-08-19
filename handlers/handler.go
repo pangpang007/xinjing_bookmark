@@ -91,6 +91,14 @@ func (h *Handler) attachImageURL(userID int64, lit *models.LiteratureResponse, i
 	}
 }
 
+func (h *Handler) publicShareImageURL(stored string) string {
+	name := services.ShareImageFilename(stored)
+	if name == "" {
+		return ""
+	}
+	return strings.TrimRight(h.cfg.PublicBaseURL, "/") + "/share-images/" + name
+}
+
 func defaultNickname(name string) string {
 	name = strings.TrimSpace(name)
 	if name == "" {
