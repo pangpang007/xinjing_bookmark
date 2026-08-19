@@ -110,7 +110,8 @@ paths:
     post:
       tags: [账号]
       summary: 微信登录
-      description: `code` 来自小程序 `wx.login`。Swagger 里没有真实 code 时会返回微信登录失败。
+      description: |
+        `code` 来自小程序 `wx.login`。Swagger 里没有真实 code 时会返回微信登录失败。
       requestBody:
         required: true
         content:
