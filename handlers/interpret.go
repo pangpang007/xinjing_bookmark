@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"strings"
@@ -8,6 +9,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/soupcircle/bookjie-api/middleware"
 	"github.com/soupcircle/bookjie-api/models"
+	"github.com/soupcircle/bookjie-api/services"
 	"github.com/soupcircle/bookjie-api/utils"
 )
 
@@ -37,6 +39,11 @@ func (h *Handler) Interpret(c *gin.Context) {
 		return
 	}
 
+	if blocked, msg := h.blockUnsafeMood(c.Request.Context(), userID, mood); blocked {
+		utils.Fail(c, utils.ErrCodeContentBlocked, msg)
+		return
+	}
+
 	limit := 0
 	if h.cfg != nil {
 		limit = h.cfg.InterpretDailyLimit
@@ -62,4 +69,49 @@ func (h *Handler) Interpret(c *gin.Context) {
 		lit.Quota = models.NewQuota(used, limit)
 	}
 	utils.OK(c, lit)
+}
+
+func (h *Handler) blockUnsafeMood(ctx context.Context, userID int64, mood string) (blocked bool, msg string) {
+	if h.wechat == nil {
+		return false, ""
+	}
+
+	openid := h.lookupOpenID(ctx, userID)
+	if openid == "" {
+		log.Printf("[WARN] msg_sec_check skipped: no openid user=%d", userID)
+		return false, ""
+	}
+
+	suggest, label, err := h.wechat.MsgSecCheck(ctx, openid, mood)
+	if err != nil {
+		log.Printf("[WARN] msg_sec_check: %v", err)
+		return false, ""
+	}
+	blocked, msg = interpretMoodDecision(suggest, label)
+	if blocked {
+		log.Printf("[INFO] msg_sec_check blocked user=%d label=%d", userID, label)
+	}
+	return blocked, msg
+}
+
+func interpretMoodDecision(suggest string, label int) (blocked bool, msg string) {
+	if !services.MsgSecBlocked(suggest) {
+		return false, ""
+	}
+	return true, services.MsgSecCheckUserMsg(label)
+}
+
+func (h *Handler) lookupOpenID(ctx context.Context, userID int64) string {
+	if h.testOpenID != "" {
+		return h.testOpenID
+	}
+	if h.db == nil || userID <= 0 {
+		return ""
+	}
+	var user models.User
+	if err := h.db.WithContext(ctx).Select("openid").First(&user, userID).Error; err != nil {
+		log.Printf("[WARN] msg_sec_check lookup openid: %v", err)
+		return ""
+	}
+	return strings.TrimSpace(user.OpenID)
 }

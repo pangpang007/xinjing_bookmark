@@ -20,7 +20,7 @@ go run .
 | 方法 | 路径 | 登录 |
 | --- | --- | --- |
 | GET | `/health` | 否 |
-| POST | `/interpret` | 是。按登录用户每天 3 次（`INTERPRET_DAILY_LIMIT`，0 表示不限制） |
+| POST | `/interpret` | 是。调模型前走微信内容安全 2.0；不通过返回 1005，不占次数。每天成功 3 次（`INTERPRET_DAILY_LIMIT`，0 表示不限制） |
 | POST | `/login` | 否 |
 | POST | `/share-image` | 是。multipart 上传小程序画好的图，返回本 API 域名 `image_url` |
 | GET | `/share-images/{uuid}.jpg` | 否。供小程序 `wx.downloadFile` / `<image>` |

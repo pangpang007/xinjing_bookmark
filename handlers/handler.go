@@ -25,6 +25,8 @@ type Handler struct {
 	r2       *services.R2
 	quota    *services.InterpretQuota
 	wxaMu    sync.Mutex
+	// testOpenID, when set, skips the users table lookup (handler tests).
+	testOpenID string
 }
 
 func New(
